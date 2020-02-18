@@ -1,0 +1,200 @@
+<template>
+    <modal transition="nice-modal-fade"
+           height="auto"
+           width="45%"
+           :pivotY=0.5
+           name="reassignAgentModal"
+           :scrollable=true
+           @before-close="beforeCloseModal"
+           style="margin-left: 52.6px;
+           background:rgba(0, 0, 0, 0)">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" @click="closeModal()" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title text-center">Reassign to retention agent</h4>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-sm-12 col-md-12 col-lg-12 ">
+                        <transition name="fade">
+                            <div v-if="reassignagentprops.indexProps.successMessage.length > 0" class="alert alert-success alert-dismissible">
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                {{reassignagentprops.indexProps.successMessage}}
+                            </div>
+                        </transition>
+                        <transition name="fade">
+                            <div v-if="reassignagentprops.indexProps.errorMessage.length > 0" class="alert alert-danger alert-dismissible">
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                                {{reassignagentprops.indexProps.errorMessage}}
+                            </div>
+                        </transition>
+                        <form id="rsaform" @submit.stop.prevent="submitRSAForm" action="#!" method="post">
+                            <div class="form-group"> 
+                                <ul id="reass-tab" class="nav nav-tabs">
+                                    <li class="active"><a href="#reassign-agent" aria-controls="Reassign agents" data-unassignintent="false" data-toggle="tab">Reassign to agent(s)</a></li>
+                                    <li><a href="#unassign-agent" aria-controls="Unassign agent" data-unassignintent="true" data-toggle="tab">Unassign agent</a></li>
+                                </ul>
+                                <div class="tab-content">
+                                    <div class="tab-pane active" id="reassign-agent">
+                                        <br />
+                                        <label for="ra-id">Reassign Agent</label>
+                                        <select id="ra-id" v-model="reassignagentprops.indexProps.reassignAgent" class="form-control">
+                                            <option value="" selected>No agent selected - current agent will be unassigned</option>
+                                            <optgroup label="Desk Manager">
+                                                <option v-for="deskManager in deskManagerList" :value="deskManager.id">{{deskManager.username}}</option>
+                                            </optgroup>
+                                            <optgroup label="Manager">
+                                                <option v-for="retentionManager in retentionManagerList" :value="retentionManager.id">{{retentionManager.username}}</option>
+                                            </optgroup>
+                                            <optgroup label="Team Leader">
+                                                <option v-for="leader in teamLeaderList" :value="leader.id">{{leader.username}}</option>
+                                            </optgroup>
+                                            <optgroup label="Agents">
+                                                <option v-for="agent in agentList" :value="agent.id">{{agent.username}}</option>
+                                            </optgroup>
+                                        </select>
+                                        <div class="form-group">
+                                            <label for="reassignPool">Pool <span data-togle="tooltip" data-html="true" title="If you select multiple agent, it will show only similar pool(s)">&nbsp<i class="fa fa-question-circle"></i></span></label>
+                                            <select name="reassignPool" v-model="reassignagentprops.indexProps.reassignPool" class="form-control">
+                                                <option value="">Select Pool</option>
+                                                <option v-for="option in reassignagentprops.indexProps.agentPool" :value="option">{{option}}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="tab-pane" id="unassign-agent">
+                                        <br />
+                                        <p class="bg-danger text-center">Unassign selected client(s)</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="status">Status</label>
+                                <select name="status" id="status" class="form-control">
+                                    <option value="">Retain current status</option>
+                                    <option v-for="option in reassignagentprops.indexProps.statusesList" :key="option.value" :value="option.Value">{{option.Text}}</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="ClientmtGroupAssignAgent">Reassign MT Group</label>
+                                <input type="checkbox" name="ClientmtGroupAssignAgent" v-model="reassignagentprops.indexProps.reassignClientMtgroupAgent" checked />
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <template v-if="reassignagentprops.indexProps.reassignAjaxing === false">
+                    <button type="button" class="btn btn-default" @click="closeModal()">Close</button>
+                    <button type="submit" form="rsaform" class="btn btn-primary">Save changes</button>
+                </template>
+                <template v-else>
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped active" role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" style="width: 100%">
+                            Please wait...
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </modal>
+</template>
+<script>
+
+    import { getPoolUser, getUsersByType } from './../api/user-api';
+    import { reassignClient } from './../api/clients-api';
+    import fh from './../dynamic-search-scripts/src/FormHelper';
+
+    export default {
+        props: {
+            reassignagentprops: {
+                required: true,
+                type: Object
+            }
+        },
+        data() {
+            return {
+                deskManagerList: [],
+                retentionManagerList: [],
+                teamLeaderList: [],
+                agentList: []
+            }
+        },
+        methods: {
+            submitRSAForm: async function (e) {
+
+                if (!this.reassignagentprops.indexProps.reassignPool) {
+                    this.reassignagentprops.indexProps.errorMessage = 'Please Select Pool';
+                    return false;
+                }
+
+                this.reassignagentprops.indexProps.reassignAjaxing = true;
+                let formData = fh.objectifyForm($(e.target).serializeArray());
+                formData.selected = this.reassignagentprops.indexProps.selected;
+                formData.id = [this.reassignagentprops.indexProps.reassignAgent.toString()];
+                formData.pool = this.reassignagentprops.indexProps.reassignPool;
+                formData.assignMtGroup = this.reassignagentprops.indexProps.reassignClientMtgroupAgent;
+
+                reassignClient(formData).then((data) => {
+
+                    if (data.success == false)
+                        throw data.message;
+
+                    toastr.success(data.message);
+                    this.reassignagentprops.indexProps.reassignAjaxing = false;
+                    this.closeModal();
+                    this.reassignagentprops.raiseEvent('search', {});
+                }).catch((error) => {
+                    toastr.error(error);
+                });
+            },
+            loadStatuses: function () {
+                if (!this.reassignagentprops.indexProps.statusesList.length) {
+                    this.reassignagentprops.raiseEvent('load-dropdown', 'statuses');
+                }
+            },
+            closeModal: function () {
+                this.$modal.hide('reassignAgentModal');
+            },
+            beforeCloseModal: function () {
+                this.reassignagentprops.viewReassign = false;
+            }
+        },
+        watch: {
+            'reassignagentprops.indexProps.reassignAgent': function (val) {
+                let payload = val && val.toString().length > 0 ? [val.toString()] : [];
+                getPoolUser(payload).then((data) => {
+                    this.reassignagentprops.indexProps.agentPool = data;
+                });
+            },
+        },
+        created() {
+            this.loadStatuses();
+            var context = '';
+            if (this.reassignagentprops.indexProps.activeTab == 'Leads') {
+                context = 'Leads';
+            }
+            else {
+                context = 'Clients';
+            }
+            getUsersByType(context).then((data) => {
+                this.deskManagerList = data.deskManagers;
+                this.retentionManagerList = data.retentionManagers;
+                this.teamLeaderList = data.teamLeaders;
+                this.agentList = data.agents;
+            });
+
+            if (!this.reassignagentprops.indexProps.reassignAgent) {
+                getPoolUser([]).then((data) => {
+                    this.reassignagentprops.indexProps.agentPool = data;
+                });
+            } else {
+                getPoolUser([this.reassignagentprops.indexProps.reassignAgent.toString()]).then((data) => {
+                    this.reassignagentprops.indexProps.agentPool = data;
+                });
+            }
+        },
+        mounted() {
+            this.$modal.show('reassignAgentModal');
+        }
+    }
+</script>

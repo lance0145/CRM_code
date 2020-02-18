@@ -1,0 +1,503 @@
+using Classes.BrandsMaster;
+using Classes.BrandsMaster.CRM.Builders;
+using CRM.Models;
+using CRM.Utilities;
+using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Linq;
+using System.Text;
+using System.Web;
+using System.Web.Script.Serialization;
+using System.Web.Script.Services;
+using System.Web.Services;
+
+namespace BrandsMaster.Webservice.Admin
+{
+    /// <summary>
+    /// This service is for user raleted actions
+    /// </summary>
+    // To allow this Web Service to be called from script, using ASP.NET AJAX, uncomment the following line. 
+    [ScriptService]
+    public class UserService : WebService
+    {
+        [WebMethod(EnableSession = true)]
+        public Dictionary<string, List<UserModel>> GetUsersGroupByTypes(string context)
+        {
+            UserUtility userUtility = new UserUtility();
+            UserModel user = userUtility.SelectUserById(UserUtility.getUserId(true));
+
+            #region GetUserOptions
+            var UserOptions = UserUtility.GetUserOptions(user, context);
+            var users = UserOptions.Key;
+            //SpeedRes += UserOptions.Value;
+            #endregion
+
+            return UserUtility.GetUserOptionsGroupByType(users, context);
+        }
+
+        [WebMethod(EnableSession = true)]
+        public IEnumerable<RoleCategories> SelectRolesAndFunction(int id)
+        {
+            RolesUtilities rolesUtilities = new RolesUtilities();
+            var result = rolesUtilities.SelectRolesAndFunction(id);
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public IEnumerable<RoleCategories> SelectAllRoleCategory(string type)
+        {
+            //1   Desk Manager
+
+            //3   Sales Manager
+            //5   Sales Team Leader
+            //2   Sales Agent
+
+            //4   Retention Manager
+            //7   Retention Team Leader
+            //12  Retention Agent
+
+            //9   Marketing
+            //8   Support
+            //11  None
+
+            RolesUtilities rolesUtilities = new RolesUtilities();
+            var result = rolesUtilities.SelectAllCategories();
+            if (type == "3")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 4 && item.Id != 7 && item.Id != 12 && item.Id != 9 && item.Id != 8 && item.Id != 11);
+
+            }
+            else if (type == "4")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 3 && item.Id != 5 && item.Id != 2 && item.Id != 9 && item.Id != 8 && item.Id != 11);
+
+            }
+            else if (type == "5")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 3 && item.Id != 4 && item.Id != 7 && item.Id != 9 && item.Id != 8 && item.Id != 11 && item.Id != 12);
+            }
+            else if (type == "7")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 3 && item.Id != 4 && item.Id != 2 && item.Id != 9 && item.Id != 8 && item.Id != 11 && item.Id != 5);
+            }
+            else if (type == "12")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 7 && item.Id != 3 && item.Id != 4 && item.Id != 2 && item.Id != 9 && item.Id != 8 && item.Id != 11 && item.Id != 5);
+            }
+            else if (type == "2")
+            {
+                result = result.Where(item => item.Id != 1 && item.Id != 7 && item.Id != 3 && item.Id != 4 && item.Id != 12 && item.Id != 9 && item.Id != 8 && item.Id != 11 && item.Id != 5);
+            }
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public int? InsertUsers(UserModel userModel, List<int> functionId, List<string> pools, List<int> users, bool sendEmail)
+        {
+            int? result = null;
+            var user = String.Join(",", users);
+            var pool = String.Join(",", pools);
+            UserUtility userUtility = new UserUtility();
+            userModel.pool = pool;
+            userModel.employees = user;
+
+            if (!userUtility.CheckUserNameExist(userModel.username))
+            {
+                result = userUtility.InsertUser(userModel, functionId);
+
+                if (sendEmail)
+                {
+                    if (result != null)
+                    {
+                        string param = $"AuthKey=cms-api-wJRQ2f69X7w3uSKSGYru6k&ClientId={result}&CustomParam=&Tag=#CrmUsrCrt#";
+                        //Classes.PostBack.PostWithReturn($"https://cmsadmin.{BrandName}.com/Api/SendEmail.aspx", param);
+                    }
+                }
+            }
+            else
+            {
+                return 0;
+            }
+
+            return result;
+
+        }
+
+        [WebMethod(EnableSession = true)]
+        public IEnumerable<Objects.Pool> SelectAllPools(string pools, string type)
+        {
+            PoolUtilities poolUtilities = new PoolUtilities();
+
+            string[] pool = new string[] { };
+
+            if (!string.IsNullOrEmpty(pools))
+            {
+                pool = pools.Split(',');
+
+                for (var item = 0; item < pool.Length; item++)
+                {
+                    pool[item] = "'" + pool[item] + "'";
+                }
+                pools = String.Join(",", pool);
+
+            }
+
+            var result = poolUtilities.SelectAllPool(pools, type);
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public IEnumerable<UserModel> SelectUsers(string entrytype, string[] pool)
+        {
+            UserModel user = new UserModel();
+
+            PoolUtilities poolUtilities = new PoolUtilities();
+
+            UserUtility userUtility = new UserUtility();
+
+            var username = Classes.BrandsMaster.encryption.Decrypt(Classes.BrandsMaster.Cookie.GetCookie("username", false));
+
+            user = userUtility.SelectUserByUsername(username);
+
+            string pools = string.Empty;
+            if (pool.Length <= 0)
+            {
+                pools = user.pool;
+                if (!string.IsNullOrEmpty(pools))
+                {
+                    pool = pools.Split(',');
+
+                    for (var item = 0; item < pool.Length; item++)
+                    {
+                        pool[item] = "'" + pool[item] + "'";
+                    }
+                    pools = String.Join(",", pool);
+                }
+            }
+            else
+            {
+                for (var item = 0; item < pool.Length; item++)
+                {
+                    pool[item] = "'" + pool[item] + "'";
+                }
+                pools = String.Join(",", pool);
+            }
+
+            string type = user.type;
+
+            var result = userUtility.SelectUserByPools(pools, type, entrytype);
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public IEnumerable<RoleTemplate> SelectTemplate(int? id)
+        {
+            TemplateUtilities templateUtilities = new TemplateUtilities();
+
+            var result = templateUtilities.SelectTemplate(null, 0, id);
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<int> SelectTemplateFunction(int templateId)
+        {
+            List<int> functions = new List<int>();
+            TemplateUtilities templateUtilities = new TemplateUtilities();
+
+            var result = templateUtilities.SelectTemplateFunctions(templateId);
+
+            if (result != null)
+                foreach (var item in result)
+                {
+                    functions.Add(item.FunctionId);
+                }
+
+
+            return functions;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public UserModel GetUsername()
+        {
+            var username = Classes.BrandsMaster.encryption.Decrypt(Classes.BrandsMaster.Cookie.GetCookie("username", false));
+            UserUtility userUtility = new UserUtility();
+
+            var user = userUtility.SelectUserByUsername(username);
+
+            return user;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<string> GetPoolUser(string[] userId)
+        {
+            UserUtility userUtility = new UserUtility();
+            var result = userUtility.SelectUserPoolByUsername((string[])userId);
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<string> GetPoolSpyAgent(string ext_id)
+        {
+            UserUtility userUtility = new UserUtility();
+
+            var result = userUtility.SelectCurrentPoolsSpyAgent(ext_id);
+            PoolUtilities poolUtilities = new PoolUtilities();
+
+            return result;
+        }
+
+        public string GetAssignedAgent(string ext_id)
+        {
+            UserUtility userUtility = new UserUtility();
+
+            var result = userUtility.SelectCurrentAssignedAgent(ext_id);
+            PoolUtilities poolUtilities = new PoolUtilities();
+
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<UserModel.SpyModel> ActiveSpyAgent(string spyDetails, string[] cur_user)
+        {
+            JavaScriptSerializer js = new JavaScriptSerializer();
+            UserUtility usersUtil = new UserUtility();
+            List<UserModel.SpyModel> myspyDetails = new List<UserModel.SpyModel>();
+            string curUser = cur_user[0];
+            var curUserType = usersUtil.SelectUserById(Int32.Parse(curUser));
+
+            object spyJson = new object();
+            spyJson = spyDetails;
+
+            if (spyJson != null)
+            {
+                myspyDetails = js.Deserialize<List<UserModel.SpyModel>>(spyJson.ToString());
+
+                List<UserModel> usersList = usersUtil.GetAgentsByAccess(curUserType);
+
+                var resUserList = myspyDetails.Select(x => x).ToList().Intersect(usersList.Select(s => new UserModel.SpyModel()
+                {
+                    account = s.extention.ToString(),
+                    agent_pool = s.pool,
+                    name = s.username
+                })).ToList();
+
+                return resUserList;
+
+            }
+
+            return myspyDetails;
+        }
+
+        public bool CheckPoolMatch(string curUser, List<string> agentPool)
+        {
+            bool checkMatch = false;
+            foreach (var agp in agentPool)
+            {
+                var checkcomma = agp.Contains(",");
+                var split_pool = Array.Empty<string>();
+
+                if (checkcomma)
+                {
+                    split_pool = agp.ToString().Split(',');
+                    if (split_pool.Any(x => x == curUser))
+                    {
+                        checkMatch = true;
+                    }
+
+                }
+                else
+                {
+                    if (curUser == agp.ToString())
+                    {
+                        checkMatch = true;
+                    }
+                }
+            }
+
+            return checkMatch;
+        }
+        public bool CheckPoolMatchWithAssigned(string curUser, List<string> agentPool, string assigned, string spyname)
+        {
+            bool checkMatch = false;
+            foreach (var agp in agentPool)
+            {
+                var checkcomma = agp.Contains(",");
+                var split_pool = Array.Empty<string>();
+                
+                if (checkcomma)
+                {
+                    split_pool = agp.ToString().Split(',');
+                    if (split_pool.Any(x => x == curUser && assigned == spyname))
+                    {
+                        checkMatch = true;
+                    }
+
+                }
+                else
+                {
+                    if (curUser == agp.ToString() && assigned == spyname)
+                    {
+                        checkMatch = true;
+                    }
+                }
+            }
+            
+
+            return checkMatch;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public UserModel GetCurrentUser()
+        {
+            UserUtility userUtility = new UserUtility();
+
+            var username = UserUtility.getUsername(true);
+
+            UserModel user = userUtility.SelectUserByUsername(username);
+
+            return user;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<RoleGroup> GetCurrentUserPermissions()
+        {
+            string userId = UserUtility.getUserId(true).ToString();
+            RolesUtilities roleUtil = new RolesUtilities();
+
+            #region construct user permission
+            // get all rolegroups, non side menu group included, check permission of current user
+            List<RoleGroup> roleGroups = roleUtil.GetRoleGroups(includeNonSidemenuGroup: true, userId: userId);
+
+            // user role group collection
+            List<RoleGroup> userRoles = new List<RoleGroup>();
+
+            roleGroups.ForEach(roleGroup => {
+
+                // put all the roles of current role group to a temp collection
+                var temRoles = roleGroup.Roles.ToList<Roles>();
+
+                //filter the temp role collection, remove null roles
+                int totalRemoved = temRoles.RemoveAll(role => role == null);
+
+                // temp was modified, means there is a null roles in the original roles collection, then replace it with the value of temp roles collection
+                if (totalRemoved > 0)
+                    roleGroup.Roles = temRoles;
+
+                userRoles.Add(roleGroup);
+            });
+            #endregion
+
+            return userRoles;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public List<string> GetPoolUserById(string userId)
+        {
+            UserUtility userUtility = new UserUtility();
+            List<string> ids = new List<string>();
+            ids.Add(userId);
+            var result = userUtility.SelectUserPoolByUsername(ids.ToArray());
+            return result;
+        }
+
+        [WebMethod(EnableSession = true)]
+        public string GetAllUsers()
+        {
+            var ser = new JavaScriptSerializer();
+            return ser.Serialize(UserUtility.GetUsersWithDids());
+        }
+
+        [WebMethod(EnableSession = true)]
+        public string ValidatePhone(string phone)
+        {
+            var ser = new JavaScriptSerializer();
+            return ser.Serialize(Classes.BrandsMaster.CRM.Utilities.ValidatePhone(phone));
+        }
+
+        [WebMethod(EnableSession = true)]
+        public void InsertDid(int userId, DidModel phone)
+        {
+            using (var conn = DBconnections.CRM("", ""))
+            {
+                var ser = new JavaScriptSerializer();
+                string selectQuery = $"SELECT dids FROM admin.users WHERE id = {userId}";
+
+                var dataTable = DBqueries.Select(conn, selectQuery);
+                List<DidModel> dids = null;
+                try
+                {
+                    dids = ser.Deserialize<List<DidModel>>(dataTable.Rows[0]["dids"].ToString());
+                }
+                finally
+                {
+                    if (dids is null)
+                        dids = new List<DidModel>();
+
+                    dids.Add(phone);
+                    string updateQuery = $"UPDATE admin.users SET dids = '{ser.Serialize(dids)}' WHERE id = {userId}";
+                    DBqueries.Update(conn, updateQuery, -1);
+                }
+            }
+        }
+
+        [WebMethod(EnableSession = true)]
+        public void RemoveDid(int userId, string did)
+        {
+            using (var conn = DBconnections.CRM("", ""))
+            {
+                var ser = new JavaScriptSerializer();
+                string selectQuery = $"SELECT dids FROM admin.users WHERE id = {userId}";
+
+                var dataTable = DBqueries.Select(conn, selectQuery);
+                List<DidModel> dids = null;
+                try
+                {
+                    dids = ser.Deserialize<List<DidModel>>(dataTable.Rows[0]["dids"].ToString());
+                }
+                finally
+                {
+                    if (dids is null)
+                        dids = new List<DidModel>();
+
+                    var item = dids.SingleOrDefault(d => d.did.Equals(did));
+                    dids.Remove(item);
+                    string updateQuery = $"UPDATE admin.users SET dids = '{ser.Serialize(dids)}' WHERE id = {userId}";
+                    DBqueries.Update(conn, updateQuery, -1);
+                }
+            }
+        }
+
+        [WebMethod(EnableSession = true)]
+        public dynamic GetUsersByType(string optionsFor = null)
+        {
+            UserUtility userUtility = new UserUtility();
+            int userid = UserUtility.getUserId();
+            var users = UserUtility.GetUserOptions(userUtility.SelectUserById(userid), optionsFor).Key;
+            if (optionsFor == "Leads") {             
+                return new
+                {
+                    deskManagers = users.Where(user => { return user.type.Equals("1"); }),
+                    retentionManagers = users.Where(user => { return user.type.Equals("3"); }),
+                    teamLeaders = users.Where(user => { return user.type.Equals("5"); }),
+                    agents = users.Where(user => { return user.type.Equals("2"); })
+                };
+            }
+            else
+            {
+                return new
+                {
+                    deskManagers = users.Where(user => { return user.type.Equals("1"); }),
+                    retentionManagers = users.Where(user => { return user.type.Equals("4"); }),
+                    teamLeaders = users.Where(user => { return user.type.Equals("7"); }),
+                    agents = users.Where(user => { return user.type.Equals("12"); })
+                };
+            }
+        }
+    }
+}
